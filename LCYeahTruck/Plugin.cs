@@ -1,5 +1,6 @@
 ﻿using BepInEx;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using HarmonyLib;
@@ -19,18 +20,14 @@ namespace LCYeahTruck {
 		private readonly Harmony harmony = new(mod_guid);
 
 		public static AssetBundle new_sounds;
-		private AudioClip yeah_clip;
-		public AudioClip YeahClip {
-			get { return yeah_clip; }
-			set { yeah_clip = value; }
+		private AudioClip _yeah_clip;
+		public AudioClip yeah_clip {
+			get { return _yeah_clip; }
+			set { _yeah_clip = value; }
 		}
-		public double flipThreshold = 120.0;
-		public double correctThreshold = 150.0;
-		private bool upside_down;
-		public bool TruckUpsideDown {
-			get { return upside_down; }
-			set { upside_down = value; }
-		}
+		public double flip_threshold = 135.0;
+		public double correct_threshold = 150.0;
+		public HashSet<int> flipped_vehicles = new HashSet<int>();
 		
         private void Awake() {
 			if (instance == null) {
@@ -45,10 +42,10 @@ namespace LCYeahTruck {
 				return;
 			}
 
-			AudioClip[] ye_list = new_sounds.LoadAssetWithSubAssets<AudioClip>("assets\\audio\\ye_fade.wav");
-			if (ye_list != null && ye_list.Length > 0) {
-				AudioClip ye_clip = ye_list[0];
-				instance.YeahClip = ye_clip;
+			AudioClip[] yl = new_sounds.LoadAssetWithSubAssets<AudioClip>("assets\\audio\\ye_fade.wav");
+			if (yl != null && yl.Length > 0) {
+				AudioClip yc = yl[0];
+				instance.yeah_clip = yc;
 			} else {
 				modlog.LogError("Failed to load YEAH audio data from extracted assets.");
 			}
@@ -67,17 +64,31 @@ namespace LCYeahTruck.Patches {
 
 		[HarmonyPatch("Update")]
 		[HarmonyPostfix]
-		static void YeahPatch(ref Quaternion ___syncedRotation, ref AudioSource ___radioAudio) {
-			double zenith_angle = System.Math.Abs(___syncedRotation.eulerAngles[2] - 180.0);
+		static void UpdatePostfix(VehicleController __instance, ref Quaternion ___syncedRotation, ref AudioSource ___radioAudio) {
+			double vehicle_angle = System.Math.Abs(___syncedRotation.eulerAngles[2] - 180.0);
+			int vid = __instance.gameObject.GetInstanceID();
 
-			if (!b.TruckUpsideDown && zenith_angle < b.flipThreshold) {
-				b.TruckUpsideDown = true;
-				___radioAudio.PlayOneShot(b.YeahClip);
+			if (!b.flipped_vehicles.Contains(vid) && vehicle_angle < b.flip_threshold) {
+				b.flipped_vehicles.Add(vid);
+				___radioAudio.PlayOneShot(b.yeah_clip);
 				modlog.LogInfo("Truck has been flipped! YEEEEEEEEEEEEEEEEEEEEEEAAAAAAAAAAAAAAAA-");
-			} else if (b.TruckUpsideDown && zenith_angle > b.correctThreshold) {
-				b.TruckUpsideDown = false;
+			} else if (b.flipped_vehicles.Contains(vid) && vehicle_angle > b.correct_threshold) {
+				b.flipped_vehicles.Remove(vid);
 				modlog.LogInfo("Truck has been corrected.");
 			}
+		}
+	}
+
+	[HarmonyPatch(typeof(StartOfRound))]
+	internal class FlipResetPatch {
+		internal static ManualLogSource modlog = YeahTruckBase.modlog;
+		internal static YeahTruckBase b = YeahTruckBase.instance;
+
+		[HarmonyPatch("Start")]
+		[HarmonyPostfix]
+		static void StartPostfix() {
+			b.flipped_vehicles.Clear();
+			modlog.LogInfo("Reset flipped vehicles.");
 		}
 	}
 }
