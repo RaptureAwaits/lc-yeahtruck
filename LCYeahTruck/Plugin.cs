@@ -13,7 +13,7 @@ namespace LCYeahTruck {
     public class YeahTruckBase : BaseUnityPlugin {
 		private const string mod_guid = "raptureawaits.yeahtruck";
 		private const string mod_name = "YeahTruck";
-		private const string mod_version = "1.1.0";
+		private const string mod_version = "1.1.1";
 		
 		internal static YeahTruckBase instance;
 		internal static ManualLogSource modlog;
@@ -22,6 +22,7 @@ namespace LCYeahTruck {
 
 		public static AssetBundle new_sounds;
 		private AudioClip _yeah_clip;
+		public float yeah_volume = 0.7f;
 		public AudioClip yeah_clip {
 			get { return _yeah_clip; }
 			set { _yeah_clip = value; }
@@ -76,7 +77,7 @@ namespace LCYeahTruck.Patches {
 		[HarmonyPatch("Update")]
 		[HarmonyPostfix]
 		static void UpdatePostfix(
-			VehicleController __instance, ref Quaternion ___syncedRotation, ref AudioSource ___radioAudio, ref PlayerControllerB ___currentDriver,
+			VehicleController __instance, ref Quaternion ___syncedRotation, ref AudioSource ___radioAudio, ref PlayerControllerB ___currentDriver, ref bool ___magnetedToShip,
 			ref WheelCollider ___FrontLeftWheel, ref WheelCollider ___FrontRightWheel, ref WheelCollider ___BackLeftWheel, ref WheelCollider ___BackRightWheel
 		) {
 			int vid = __instance.gameObject.GetInstanceID();
@@ -88,14 +89,14 @@ namespace LCYeahTruck.Patches {
 				is_on_cooldown = false;
 			}
 
-			bool can_vehicle_be_cool = !b.cool_vehicles.Contains(vid)  && ___currentDriver != null;
+			bool can_vehicle_be_cool = !b.cool_vehicles.Contains(vid)  && ___currentDriver != null && !___magnetedToShip;
 
 			// Check the vertical angle of the vehicle against the flip threshold
 			double vehicle_angle = System.Math.Abs(___syncedRotation.eulerAngles[2] - 180.0);
 			if (vehicle_angle < b.flip_threshold && can_vehicle_be_cool) {
 				b.cool_vehicles.Add(vid);
 				if (!is_on_cooldown) {
-					___radioAudio.PlayOneShot(b.yeah_clip);
+					___radioAudio.PlayOneShot(b.yeah_clip, b.yeah_volume);
 					modlog.LogInfo("Truck has been flipped! YEEEEEEEEEEEEEEEEEEEEEEAAAAAAAAAAAAAAAA-");
 					b.cooldowns.Add(vid, DateTime.Now + b.cooldown_seconds);
 				}
@@ -106,7 +107,7 @@ namespace LCYeahTruck.Patches {
 			if (is_airborne && can_vehicle_be_cool) {
 				b.cool_vehicles.Add(vid);
 				if (!is_on_cooldown) {
-					___radioAudio.PlayOneShot(b.yeah_clip);
+					___radioAudio.PlayOneShot(b.yeah_clip, b.yeah_volume);
 					modlog.LogInfo("Truck is airborne! YEEEEEEEEEEEEEEEEEEEEEEAAAAAAAAAAAAAAAA-");
 					b.cooldowns.Add(vid, DateTime.Now + b.cooldown_seconds);
 				}
